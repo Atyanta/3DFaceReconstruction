@@ -1,17 +1,19 @@
-# DECA: Detailed Expression Capture and Animation (SIGGRAPH2021)
+# Rekonstruksi wajah 3D dengan full kulit: improvement dari DECA: Detailed Expression Capture and Animation (SIGGRAPH2021) oleh Atyanta
 
 <p align="center"> 
 <img src="TestSamples/teaser/results/teaser.gif">
 </p>
 <p align="center">input image, aligned reconstruction, animation with various poses & expressions<p align="center">
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YadiraF/DECA/blob/master/Detailed_Expression_Capture_and_Animation.ipynb?authuser=1)
+Bisa buka di COLAB!
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1OZC26ygYIXIPubZQf6E0eKz8rRmykjC6?usp=sharing)
 
-This is the official Pytorch implementation of DECA. 
+Ini adalah cara memakainya! Namun tolong cek di google COLAB untuk mempermudah anda melakukan konfigurasinya! 
 
+Cek definisi asli:
 DECA reconstructs a 3D head model with detailed facial geometry from a single input image. The resulting 3D head model can be easily animated. Please refer to the [arXiv paper](https://arxiv.org/abs/2012.04012) for more details.
 
-The main features:
+Apa yang bisa dilakukan:
 
 * **Reconstruction:** produces head pose, shape, detailed face geometry, and lighting information from a single image.
 * **Animation:** animate the face with realistic wrinkle deformations.
