@@ -51,6 +51,14 @@ def main(args):
         with torch.no_grad():
             codedict = deca.encode(images)
             opdict, visdict = deca.decode(codedict) #tensor
+            # Menampilkan Landmark 2D dan 3D
+            landmarks2d = opdict['landmarks2d'][0].cpu().numpy()
+            landmarks3d = opdict['landmarks3d'][0].cpu().numpy()
+
+            print("Landmarks 2D:")
+            print(landmarks2d)  # Matriks koordinat 2D
+            print("\nLandmarks 3D:")
+            print(landmarks3d)  # Matriks koordinat 3D
             if args.render_orig:
                 tform = testdata[i]['tform'][None, ...]
                 tform = torch.inverse(tform).transpose(1,2).to(device)
