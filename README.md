@@ -23,8 +23,8 @@ Apa yang bisa dilakukan:
 ## Getting Started
 Clone the repo:
   ```bash
-  git clone https://github.com/YadiraF/DECA
-  cd DECA
+  git clone https://github.com/YadiraF/DECA](https://github.com/Atyanta/3DFaceReconstruction/
+  cd 3DFaceReconstruction
   ```  
 
 ### Requirements
