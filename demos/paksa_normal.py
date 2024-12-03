@@ -38,9 +38,18 @@ def main(args):
         with torch.no_grad():
             # Rekonstruksi wajah dengan DECA
             codedict = deca.encode(images)
-            opdict, visdict = deca.decode(codedict)
+            
+            # Pastikan shape_params dan expression_params adalah tensor
+            shape_params = torch.tensor(codedict['shape'], dtype=torch.float32) if not isinstance(codedict['shape'], torch.Tensor) else codedict['shape']
+            expression_params = torch.tensor(codedict['exp'], dtype=torch.float32) if not isinstance(codedict['exp'], torch.Tensor) else codedict['exp']
 
-            # Memaksa ekspresi dan pose normal
+            # Gabungkan shape_params dan expression_params menjadi betas
+            betas = torch.cat([shape_params, expression_params], dim=1)
+            
+            # Masukkan betas ke dalam codedict
+            codedict['betas'] = betas
+
+            # Rekonstruksi wajah dengan pose dan ekspresi normal
             codedict['pose'][:, :3] = 0  # Atur pose global (rotasi kepala) ke nol
             codedict['pose'][:, 3:] = 0  # Atur jaw pose (bukaan mulut) ke nol
             codedict['exp'] = 0          # Atur ekspresi ke nol (neutral expression)
