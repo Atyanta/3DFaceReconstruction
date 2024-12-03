@@ -1,126 +1,110 @@
-# -*- coding: utf-8 -*-
-import os, sys
-import cv2
-import numpy as np
-from time import time
-from scipy.io import savemat
-import argparse
-from tqdm import tqdm
+import os
 import torch
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import cv2
+import imageio
+import numpy as np
 from decalib.deca import DECA
 from decalib.datasets import datasets
 from decalib.utils import util
 from decalib.utils.config import cfg as deca_cfg
-from decalib.utils.tensor_cropper import transform_points
+from decalib.utils.render import batch_euler2axis, deg2rad
+
 
 def main(args):
-    # Konfigurasi direktori hasil
     savefolder = args.savefolder
-    os.makedirs(savefolder, exist_ok=True)
     device = args.device
+    os.makedirs(savefolder, exist_ok=True)
 
-    # Memuat data gambar untuk pengujian
-    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector, sample_step=args.sample_step)
-
-    # Konfigurasi DECA
-    deca_cfg.model.use_tex = args.useTex
+    # load test images 
+    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)
+    expdata = datasets.TestData(args.exp_path, iscrop=args.iscrop, face_detector=args.detector)
+    
+    # DECA
     deca_cfg.rasterizer_type = args.rasterizer_type
-    deca_cfg.model.extract_tex = args.extractTex
     deca = DECA(config=deca_cfg, device=device)
 
-    # Proses rekonstruksi untuk setiap gambar
-    for i in tqdm(range(len(testdata))):
+    visdict_list_list = []
+    for i in range(len(testdata)):
         name = testdata[i]['imagename']
-        images = testdata[i]['image'].to(device)[None, ...]
-
+        images = testdata[i]['image'].to(device)[None,...]
+        
         with torch.no_grad():
-            # Rekonstruksi wajah dengan DECA
             codedict = deca.encode(images)
-            
-            # Pastikan shape_params dan expression_params adalah tensor
-            shape_params = torch.tensor(codedict['shape'], dtype=torch.float32) if not isinstance(codedict['shape'], torch.Tensor) else codedict['shape']
-            expression_params = torch.tensor(codedict['exp'], dtype=torch.float32) if not isinstance(codedict['exp'], torch.Tensor) else codedict['exp']
+            opdict, visdict = deca.decode(codedict)  # tensor
+        
+        # Menjaga pose dan ekspresi wajah normal (netral)
+        # Set pose menjadi netral (yaw=0, pitch=0, roll=0)
+        euler_pose = torch.zeros((1, 3)).to(device)
+        global_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda()))  # Pose normal
+        codedict['pose'][:, :3] = global_pose
+        codedict['cam'][:, :] = 0.
+        codedict['cam'][:, 0] = 8
 
-            # Gabungkan shape_params dan expression_params menjadi betas
-            betas = torch.cat([shape_params, expression_params], dim=1)
-            
-            # Masukkan betas ke dalam codedict
-            codedict['betas'] = betas
+        # Setelah memastikan pose wajah normal, kita ambil gambar dengan pose ini
+        _, visdict_view = deca.decode(codedict)
+        visdict = {x: visdict[x] for x in ['inputs', 'shape_detail_images']}
+        visdict['pose'] = visdict_view['shape_detail_images']
 
-            # Rekonstruksi wajah dengan pose dan ekspresi normal
-            codedict['pose'][:, :3] = 0  # Atur pose global (rotasi kepala) ke nol
-            codedict['pose'][:, 3:] = 0  # Atur jaw pose (bukaan mulut) ke nol
-            codedict['exp'] = 0          # Atur ekspresi ke nol (neutral expression)
+        # Menambahkan ke list
+        visdict_list = [visdict]
+        
+        # Transfer ekspresi wajah
+        for (i, k) in enumerate(range(len(expdata))):
+            exp_images = expdata[i]['image'].to(device)[None,...]
+            exp_codedict = deca.encode(exp_images)
 
-            # Dekode ulang dengan pose dan ekspresi normal
-            opdict, visdict = deca.decode(codedict)
+            # Transfer ekspresi dari gambar ekspresi ke gambar input
+            codedict['pose'][:, 3:] = exp_codedict['pose'][:, 3:]  # Transfer pose wajah ekspresi
+            codedict['exp'] = exp_codedict['exp']  # Transfer ekspresi wajah
 
-            # Menampilkan koordinat landmark 2D dan 3D
-            landmarks2d = opdict['landmarks2d'][0].cpu().numpy()
-            landmarks3d = opdict['landmarks3d'][0].cpu().numpy()
+            # Hasil transfer ekspresi
+            _, exp_visdict = deca.decode(codedict)
+            visdict_list[i]['exp'] = exp_visdict['shape_detail_images']
+        
+        visdict_list_list.append(visdict_list)
+    
+    # Menulis gambar GIF hasil
+    writer = imageio.get_writer(os.path.join(savefolder, 'teaser.gif'), mode='I')
+    yaw_list = list(range(0, 31, 5)) + list(range(30, -31, -5))  # Yaw angles from -30 to 30
+    for i in range(len(yaw_list)):
+        grid_image_list = []
+        for j in range(len(testdata)):
+            grid_image = deca.visualize(visdict_list_list[j][i])
+            grid_image_list.append(grid_image)
+        grid_image_all = np.concatenate(grid_image_list, 0)
+        grid_image_all = rescale(grid_image_all, 0.6, multichannel=True)  # Resize for showing in github
+        writer.append_data(grid_image_all[:, :, [2, 1, 0]])
 
-            if args.saveDepth or args.saveObj or args.saveImages:
-                os.makedirs(os.path.join(savefolder, name), exist_ok=True)
+    print(f'-- please check the teaser figure in {savefolder}')
 
-            # Menyimpan hasil Depth Image
-            if args.saveDepth:
-                depth_image = deca.render.render_depth(opdict['trans_verts']).repeat(1, 3, 1, 1)
-                visdict['depth_images'] = depth_image
-                cv2.imwrite(os.path.join(savefolder, name, name + '_depth.jpg'), util.tensor2image(depth_image[0]))
 
-            # Menyimpan file Detail OBJ
-            if args.saveObj:
-                detail_obj_path = os.path.join(savefolder, name, name + '_detail.obj')
-                deca.save_obj(detail_obj_path, opdict)
+def rescale(image, scale, multichannel=True):
+    return cv2.resize(image, (0, 0), fx=scale, fy=scale)
 
-            # Menyimpan file Mat
-            if args.saveMat:
-                opdict = util.dict_tensor2npy(opdict)
-                savemat(os.path.join(savefolder, name, name + '.mat'), opdict)
-
-            # Menyimpan Visualisasi 3D dan Depth
-            if args.saveImages:
-                # Menyimpan gambar-gambar terpisah untuk visualisasi
-                for vis_name in ['inputs', 'rendered_images', 'albedo_images', 'shape_images', 'shape_detail_images', 'landmarks2d']:
-                    if vis_name in visdict:
-                        image = util.tensor2image(visdict[vis_name][0])
-                        cv2.imwrite(os.path.join(savefolder, name, name + '_' + vis_name + '.jpg'), image)
-
-                # Gabungkan gambar Depth dan 3D menjadi satu gambar _vis.jpg
-                depth_image = util.tensor2image(visdict['depth_images'][0])
-                rendered_image = util.tensor2image(visdict['rendered_images'][0])
-
-                # Menggabungkan gambar depth dan 3D untuk visualisasi
-                combined_image = np.hstack((depth_image, rendered_image))
-                cv2.imwrite(os.path.join(savefolder, name + '_vis.jpg'), combined_image)
-
-    print(f'-- Hasil disimpan di {savefolder}')
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Paksa Normal: Rekonstruksi Wajah Normal dengan Ekspresi')
+    parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
 
-    parser.add_argument('-i', '--inputpath', default='TestSamples/examples', type=str, help='Path ke data gambar input')
-    parser.add_argument('-s', '--savefolder', default='Result_Normal', type=str, help='Path ke folder hasil rekonstruksi')
-    parser.add_argument('--device', default='cuda', type=str, help='Perangkat yang digunakan (cpu/cuda)')
-    
-    # Pengaturan gambar
-    parser.add_argument('--iscrop', default=True, type=lambda x: x.lower() in ['true', '1'], help='Apakah gambar input sudah dipotong dengan baik?')
-    parser.add_argument('--sample_step', default=10, type=int, help='Ambil gambar dari video setiap langkah ini')
-    parser.add_argument('--detector', default='fan', type=str, help='Detektor untuk pemotongan wajah')
+    # Path untuk gambar input dan ekspresi
+    parser.add_argument('-i', '--inputpath', default='TestSamples/examples/IMG_0392_inputs.jpg', type=str, help='path to input image')
+    parser.add_argument('-e', '--exp_path', default='TestSamples/exp/7.jpg', type=str, help='path to expression')
+    parser.add_argument('-s', '--savefolder', default='TestSamples/animation_results', type=str, help='output directory to save results')
+    parser.add_argument('--device', default='cuda', type=str, help='set device, cpu for using cpu')
 
-    # Pengaturan rendering
-    parser.add_argument('--rasterizer_type', default='standard', type=str, help='Tipe rasterizer: pytorch3d atau standard')
-    parser.add_argument('--render_orig', default=True, type=lambda x: x.lower() in ['true', '1'], help='Render gambar dalam ukuran asli')
-    
-    # Pengaturan hasil simpan
-    parser.add_argument('--useTex', default=False, type=lambda x: x.lower() in ['true', '1'], help='Gunakan model tekstur FLAME untuk membuat peta tekstur')
-    parser.add_argument('--extractTex', default=True, type=lambda x: x.lower() in ['true', '1'], help='Ekstraksi tekstur dari gambar input')
-    parser.add_argument('--saveDepth', default=False, type=lambda x: x.lower() in ['true', '1'], help='Simpan gambar depth')
-    parser.add_argument('--saveObj', default=True, type=lambda x: x.lower() in ['true', '1'], help='Simpan output sebagai file .obj')
-    parser.add_argument('--saveMat', default=False, type=lambda x: x.lower() in ['true', '1'], help='Simpan file .mat')
-    parser.add_argument('--saveImages', default=True, type=lambda x: x.lower() in ['true', '1'], help='Simpan gambar visualisasi')
+    # Rendering options
+    parser.add_argument('--rasterizer_type', default='standard', type=str, help='rasterizer type: pytorch3d or standard')
 
-    # Jalankan program
+    # Proses gambar test
+    parser.add_argument('--iscrop', default=True, type=lambda x: x.lower() in ['true', '1'], help='whether to crop input image')
+    parser.add_argument('--detector', default='fan', type=str, help='detector for cropping face')
+
+    # Pilihan untuk menyimpan hasil
+    parser.add_argument('--saveVis', default=True, type=lambda x: x.lower() in ['true', '1'], help='whether to save visualization of output')
+    parser.add_argument('--saveKpt', default=False, type=lambda x: x.lower() in ['true', '1'], help='whether to save 2D and 3D keypoints')
+    parser.add_argument('--saveDepth', default=False, type=lambda x: x.lower() in ['true', '1'], help='whether to save depth image')
+    parser.add_argument('--saveObj', default=False, type=lambda x: x.lower() in ['true', '1'], help='whether to save outputs as .obj')
+    parser.add_argument('--saveMat', default=False, type=lambda x: x.lower() in ['true', '1'], help='whether to save outputs as .mat')
+    parser.add_argument('--saveImages', default=False, type=lambda x: x.lower() in ['true', '1'], help='whether to save visualization output as separate images')
+
+    # Memulai program
     main(parser.parse_args())
