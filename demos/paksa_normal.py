@@ -38,70 +38,71 @@ def batch_euler2axis(euler_angles):
 
     return rot_matrix
 
-def main(args):
+# Pada bagian dalam main()
+def main(input_folder, output_folder, device="cuda", rasterizer_type="standard", iscrop=True, detector="fan"):
     # Buat folder output jika belum ada
-    os.makedirs(args.savefolder, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
     # Load test images
-    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)
+    testdata = datasets.TestData(input_folder, iscrop=iscrop, face_detector=detector)
 
     # Inisialisasi DECA
-    deca_cfg.model.use_tex = args.useTex  # Menggunakan tekstur FLAME jika diinginkan
-    deca_cfg.rasterizer_type = args.rasterizer_type
-    deca_cfg.model.extract_tex = args.extractTex  # Menyertakan ekstraksi tekstur
-    deca = DECA(config=deca_cfg, device=args.device)
+    deca_cfg.model.use_tex = False  # Tidak menggunakan tekstur FLAME
+    deca_cfg.rasterizer_type = rasterizer_type
+    deca_cfg.model.extract_tex = True  # Menyertakan ekstraksi tekstur
+    deca = DECA(config=deca_cfg, device=device)
 
     for i in tqdm(range(len(testdata))):
         name = testdata[i]['imagename']
-        images = testdata[i]['image'].to(args.device)[None, ...]
-
+        images = testdata[i]['image'].to(device)[None,...]
         with torch.no_grad():
             codedict = deca.encode(images)
             opdict, visdict = deca.decode(codedict)  # tensor
 
             # Pose Normal (Netral)
             euler_pose = torch.zeros((1, 3))  # Menetapkan pose netral
-            global_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda())) 
+            global_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
 
-            # Pastikan dimensi global_pose sesuai dengan yang diharapkan
-            # Jika global_pose memiliki ukuran (3, 3), kita perlu menyesuaikannya dengan ukuran (1, 3)
-            # Dengan menggunakan [None, :] untuk menambah dimensi batch dan memastikan dimensi sesuai
-            global_pose = global_pose[None, :, :3]  # Mengambil slice yang benar atau menambah dimensi
+            # Print untuk memeriksa dimensi
+            print("Global Pose Shape:", global_pose.shape)  # Pastikan dimensi (1, 3)
+            print("Codedict Pose Shape:", codedict['pose'].shape)  # Pastikan dimensi cocok
 
-            codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
+            # Memastikan dimensi yang benar
+            if global_pose.shape == (1, 3) and codedict['pose'].shape[0] == 3:
+                codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
+            else:
+                print("Dimensi global_pose atau codedict['pose'] tidak sesuai!")
+                continue
+
             codedict['cam'][:] = 0.
-            codedict['cam'][:, 0] = 8
+            codedict['cam'][:,0] = 8
             _, visdict_view = deca.decode(codedict)   
             visdict = {x: visdict[x] for x in ['inputs', 'shape_detail_images']}         
             visdict['pose'] = visdict_view['shape_detail_images']
 
             # Ekspresi Wajah Normal (tidak ekstrem)
-            jaw_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda()))  # Ekspresi netral
-            codedict['pose'][:, 3:] = jaw_pose
+            euler_pose = torch.zeros((1, 3))  # Ekspresi netral
+            jaw_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
+            # Print untuk memeriksa dimensi
+            print("Jaw Pose Shape:", jaw_pose.shape)  # Pastikan dimensi (1, 3)
+            codedict['pose'][:,3:] = jaw_pose  # Menetapkan ekspresi wajah netral
             _, visdict_view_exp = deca.decode(codedict)     
             visdict['exp'] = visdict_view_exp['shape_detail_images']
 
             # Visualisasi hasil
-            os.makedirs(os.path.join(args.savefolder, name), exist_ok=True)
-            cv2.imwrite(os.path.join(args.savefolder, name + '_pose_exp_vis.jpg'), deca.visualize(visdict))
+            os.makedirs(os.path.join(output_folder, name), exist_ok=True)
+            cv2.imwrite(os.path.join(output_folder, name + '_pose_exp_vis.jpg'), deca.visualize(visdict))
 
-            if args.saveVis:  # Save all visualization images
+            if True:  # Save all visualization images
                 for vis_name in ['inputs', 'rendered_images', 'albedo_images', 'shape_images', 'shape_detail_images', 'landmarks2d']:
-                    if vis_name not in visdict:
+                    if vis_name not in visdict.keys():
                         continue
                     image = util.tensor2image(visdict[vis_name][0])
-                    cv2.imwrite(os.path.join(args.savefolder, name, name + '_' + vis_name + '.jpg'), image)
+                    cv2.imwrite(os.path.join(output_folder, name, name + '_' + vis_name + '.jpg'), image)
 
-            # Save additional files like depth, obj, etc.
-            if args.saveDepth:
-                depth_image = util.tensor2image(visdict['depth'][0])
-                cv2.imwrite(os.path.join(args.savefolder, name, name + '_depth.jpg'), depth_image)
+    print(f'-- please check the results in {output_folder}')
 
-            if args.saveObj:
-                mesh = visdict['mesh'][0]
-                mesh.export(os.path.join(args.savefolder, name, name + '_detail.obj'))
 
-    print(f'-- please check the results in {args.savefolder}')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
