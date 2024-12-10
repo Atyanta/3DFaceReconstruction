@@ -1,14 +1,17 @@
-import os
+import os, sys
 import cv2
 import torch
 import argparse
+import numpy as np
 from tqdm import tqdm
+from scipy.io import savemat
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from decalib.deca import DECA
 from decalib.datasets import datasets 
 from decalib.utils import util
 from decalib.utils.config import cfg as deca_cfg
+from decalib.utils.tensor_cropper import transform_points
 
 # Fungsi untuk konversi Euler ke axis (untuk rotasi)
 def batch_euler2axis(euler_angles):
