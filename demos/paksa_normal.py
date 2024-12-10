@@ -61,7 +61,10 @@ def main(args):
             # Pose Normal (Netral)
             euler_pose = torch.zeros((1, 3))  # Menetapkan pose netral
             global_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
-            codedict['pose'][:,:3] = global_pose
+
+            # Fix: Assign just the pose vector, not the full rotation matrix
+            codedict['pose'][:,:3] = euler_pose[:,:3]  # Assign Euler angles directly to pose (1x3)
+
             codedict['cam'][:] = 0.
             codedict['cam'][:,0] = 8
             _, visdict_view = deca.decode(codedict)   
