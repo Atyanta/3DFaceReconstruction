@@ -13,6 +13,10 @@ from decalib.utils import util
 from decalib.utils.config import cfg as deca_cfg
 from decalib.utils.tensor_cropper import transform_points
 
+# Convert degrees to radians
+def deg2rad(degrees):
+    return degrees * (np.pi / 180.0)
+
 # Fungsi untuk konversi Euler ke axis (untuk rotasi)
 def batch_euler2axis(euler_angles):
     batch_size = euler_angles.shape[0]
