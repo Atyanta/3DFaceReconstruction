@@ -54,7 +54,7 @@ def main(args):
     for i in tqdm(range(len(testdata))):
         name = testdata[i]['imagename']
         images = testdata[i]['image'].to(args.device)[None, ...]
-        
+
         with torch.no_grad():
             codedict = deca.encode(images)
             opdict, visdict = deca.decode(codedict)  # tensor
@@ -62,6 +62,12 @@ def main(args):
             # Pose Normal (Netral)
             euler_pose = torch.zeros((1, 3))  # Menetapkan pose netral
             global_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda())) 
+
+            # Pastikan dimensi global_pose sesuai dengan yang diharapkan
+            # Jika global_pose memiliki ukuran (3, 3), kita perlu menyesuaikannya dengan ukuran (1, 3)
+            # Mengambil bagian pertama dari tensor atau reshape sesuai kebutuhan
+            global_pose = global_pose[None, :, :3]  # Mengambil slice yang benar atau menambah dimensi
+
             codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
             codedict['cam'][:] = 0.
             codedict['cam'][:, 0] = 8
@@ -96,7 +102,6 @@ def main(args):
                 mesh.export(os.path.join(args.savefolder, name, name + '_detail.obj'))
 
     print(f'-- please check the results in {args.savefolder}')
-
 
 
 if __name__ == '__main__':
