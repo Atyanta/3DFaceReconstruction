@@ -3,6 +3,8 @@ import cv2
 import torch
 import argparse
 from tqdm import tqdm
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from decalib.deca import DECA
 from decalib.datasets import datasets 
 from decalib.utils import util
