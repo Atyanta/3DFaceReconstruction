@@ -90,7 +90,6 @@ def main(args):
                     cv2.imwrite(os.path.join(args.savefolder, name, name + '_' + vis_name + '.jpg'), image)
 
     print(f'-- please check the results in {args.savefolder}')
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
 
