@@ -46,35 +46,32 @@ def main(args):
     testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)
 
     # Inisialisasi DECA
-    deca_cfg.model.use_tex = args.useTex  # Menyesuaikan penggunaan tekstur FLAME
+    deca_cfg.model.use_tex = args.useTex  # Menggunakan tekstur FLAME jika diinginkan
     deca_cfg.rasterizer_type = args.rasterizer_type
     deca_cfg.model.extract_tex = args.extractTex  # Menyertakan ekstraksi tekstur
     deca = DECA(config=deca_cfg, device=args.device)
 
     for i in tqdm(range(len(testdata))):
         name = testdata[i]['imagename']
-        images = testdata[i]['image'].to(args.device)[None,...]
+        images = testdata[i]['image'].to(args.device)[None, ...]
+        
         with torch.no_grad():
             codedict = deca.encode(images)
             opdict, visdict = deca.decode(codedict)  # tensor
 
             # Pose Normal (Netral)
             euler_pose = torch.zeros((1, 3))  # Menetapkan pose netral
-            global_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
-
-            # Fix: Assign just the pose vector, not the full rotation matrix
-            codedict['pose'][:,:3] = euler_pose[:,:3]  # Assign Euler angles directly to pose (1x3)
-
+            global_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda())) 
+            codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
             codedict['cam'][:] = 0.
-            codedict['cam'][:,0] = 8
+            codedict['cam'][:, 0] = 8
             _, visdict_view = deca.decode(codedict)   
             visdict = {x: visdict[x] for x in ['inputs', 'shape_detail_images']}         
             visdict['pose'] = visdict_view['shape_detail_images']
 
             # Ekspresi Wajah Normal (tidak ekstrem)
-            euler_pose = torch.zeros((1, 3))  # Ekspresi netral
-            jaw_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
-            codedict['pose'][:,3:] = jaw_pose
+            jaw_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda()))  # Ekspresi netral
+            codedict['pose'][:, 3:] = jaw_pose
             _, visdict_view_exp = deca.decode(codedict)     
             visdict['exp'] = visdict_view_exp['shape_detail_images']
 
@@ -82,14 +79,26 @@ def main(args):
             os.makedirs(os.path.join(args.savefolder, name), exist_ok=True)
             cv2.imwrite(os.path.join(args.savefolder, name + '_pose_exp_vis.jpg'), deca.visualize(visdict))
 
-            if args.saveImages:  # Save all visualization images
+            if args.saveVis:  # Save all visualization images
                 for vis_name in ['inputs', 'rendered_images', 'albedo_images', 'shape_images', 'shape_detail_images', 'landmarks2d']:
-                    if vis_name not in visdict.keys():
+                    if vis_name not in visdict:
                         continue
                     image = util.tensor2image(visdict[vis_name][0])
                     cv2.imwrite(os.path.join(args.savefolder, name, name + '_' + vis_name + '.jpg'), image)
 
+            # Save additional files like depth, obj, etc.
+            if args.saveDepth:
+                depth_image = util.tensor2image(visdict['depth'][0])
+                cv2.imwrite(os.path.join(args.savefolder, name, name + '_depth.jpg'), depth_image)
+
+            if args.saveObj:
+                mesh = visdict['mesh'][0]
+                mesh.export(os.path.join(args.savefolder, name, name + '_detail.obj'))
+
     print(f'-- please check the results in {args.savefolder}')
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
 
