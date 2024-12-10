@@ -65,7 +65,7 @@ def main(args):
 
             # Pastikan dimensi global_pose sesuai dengan yang diharapkan
             # Jika global_pose memiliki ukuran (3, 3), kita perlu menyesuaikannya dengan ukuran (1, 3)
-            # Mengambil bagian pertama dari tensor atau reshape sesuai kebutuhan
+            # Dengan menggunakan [None, :] untuk menambah dimensi batch dan memastikan dimensi sesuai
             global_pose = global_pose[None, :, :3]  # Mengambil slice yang benar atau menambah dimensi
 
             codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
@@ -102,7 +102,6 @@ def main(args):
                 mesh.export(os.path.join(args.savefolder, name, name + '_detail.obj'))
 
     print(f'-- please check the results in {args.savefolder}')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
