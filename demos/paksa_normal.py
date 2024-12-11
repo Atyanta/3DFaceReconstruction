@@ -70,6 +70,8 @@ def main(args):
     
             # Simpan file .obj
             deca.save_obj(obj_path, opdict)
+
+    
     print(f'-- Please check the results in {savefolder}')
 
 if __name__ == '__main__':
