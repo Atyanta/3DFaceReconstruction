@@ -63,7 +63,16 @@ def main(args):
         # Simpan objek .obj
         if args.saveObj:
             deca.save_obj(os.path.join(savefolder, name, name + '.obj'), opdict)
-
+        # Pastikan folder untuk menyimpan file .obj ada
+        if args.saveObj:
+            obj_folder = os.path.join(savefolder, name, save_type)  # Sesuaikan dengan struktur folder yang Anda inginkan
+            os.makedirs(obj_folder, exist_ok=True)  # Membuat folder jika belum ada
+    
+            # Tentukan path untuk file .obj yang akan disimpan
+            obj_path = os.path.join(obj_folder, name + '.obj')
+    
+            # Simpan file .obj
+            deca.save_obj(obj_path, opdict)
     print(f'-- Please check the results in {savefolder}')
 
 if __name__ == '__main__':
