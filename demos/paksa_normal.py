@@ -1,151 +1,94 @@
 import os, sys
 import cv2
-import torch
-import argparse
 import numpy as np
-from tqdm import tqdm
+from time import time
 from scipy.io import savemat
+import argparse
+import imageio
+from skimage.transform import rescale
+import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from decalib.deca import DECA
 from decalib.datasets import datasets 
 from decalib.utils import util
+from decalib.utils.rotation_converter import batch_euler2axis, deg2rad
 from decalib.utils.config import cfg as deca_cfg
-from decalib.utils.tensor_cropper import transform_points
 
-# Convert degrees to radians
-def deg2rad(degrees):
-    return degrees * (np.pi / 180.0)
-
-# Fungsi untuk konversi Euler ke axis (untuk rotasi)
-def batch_euler2axis(euler_angles):
-    batch_size = euler_angles.shape[0]
-    cos_a = torch.cos(euler_angles)
-    sin_a = torch.sin(euler_angles)
-    rot_matrix = torch.zeros(batch_size, 3, 3).to(euler_angles.device)
-
-    rot_matrix[:, 0, 0] = cos_a[:, 1] * cos_a[:, 2]
-    rot_matrix[:, 0, 1] = -cos_a[:, 1] * sin_a[:, 2]
-    rot_matrix[:, 0, 2] = sin_a[:, 1]
-
-    rot_matrix[:, 1, 0] = sin_a[:, 0] * sin_a[:, 1] * cos_a[:, 2] + cos_a[:, 0] * sin_a[:, 2]
-    rot_matrix[:, 1, 1] = -sin_a[:, 0] * sin_a[:, 1] * sin_a[:, 2] + cos_a[:, 0] * cos_a[:, 2]
-    rot_matrix[:, 1, 2] = -cos_a[:, 1] * sin_a[:, 0]
-
-    rot_matrix[:, 2, 0] = -cos_a[:, 0] * sin_a[:, 1] * cos_a[:, 2] + sin_a[:, 0] * sin_a[:, 2]
-    rot_matrix[:, 2, 1] = cos_a[:, 0] * sin_a[:, 1] * sin_a[:, 2] + sin_a[:, 0] * cos_a[:, 2]
-    rot_matrix[:, 2, 2] = cos_a[:, 0] * cos_a[:, 1]
-
-    return rot_matrix
-
-# Pada bagian dalam main()
-def main(input_folder, output_folder, device="cuda", rasterizer_type="standard", iscrop=True, detector="fan"):
-    # Buat folder output jika belum ada
-    os.makedirs(output_folder, exist_ok=True)
+def main(args):
+    savefolder = args.savefolder
+    device = args.device
+    os.makedirs(savefolder, exist_ok=True)
 
     # Load test images
-    testdata = datasets.TestData(input_folder, iscrop=iscrop, face_detector=detector)
-
-    # Inisialisasi DECA
-    deca_cfg.model.use_tex = False  # Tidak menggunakan tekstur FLAME
-    deca_cfg.rasterizer_type = rasterizer_type
-    deca_cfg.model.extract_tex = True  # Menyertakan ekstraksi tekstur
+    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)
+    expdata = datasets.TestData(args.exp_path, iscrop=args.iscrop, face_detector=args.detector)
+    
+    # Initialize DECA model
+    deca_cfg.rasterizer_type = args.rasterizer_type
     deca = DECA(config=deca_cfg, device=device)
 
-    for i in tqdm(range(len(testdata))):
+    visdict_list_list = []
+    
+    # Iterate through each image in the test dataset
+    for i in range(len(testdata)):
         name = testdata[i]['imagename']
-        images = testdata[i]['image'].to(device)[None,...]
+        images = testdata[i]['image'].to(device)[None, ...]
+        
+        # Run DECA encode and decode without gradients (no optimization)
         with torch.no_grad():
             codedict = deca.encode(images)
-            opdict, visdict = deca.decode(codedict)  # tensor
+            opdict, visdict = deca.decode(codedict)  # Get tensor output and visual dictionary
 
-            # Pose Normal (Netral)
-            euler_pose = torch.zeros((1, 3))  # Menetapkan pose netral
-            global_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
-
-            # Print untuk memeriksa dimensi
-            print("Global Pose Shape:", global_pose.shape)  # Pastikan dimensi (1, 3)
-            print("Codedict Pose Shape:", codedict['pose'].shape)  # Pastikan dimensi cocok
-
-            # Memastikan dimensi yang benar
-            if global_pose.shape == (1, 3) and codedict['pose'].shape[0] == 3:
-                codedict['pose'][:, :3] = global_pose  # Menetapkan pose netral
-            else:
-                print("Dimensi global_pose atau codedict['pose'] tidak sesuai!")
-                continue
-
-            codedict['cam'][:] = 0.
-            codedict['cam'][:,0] = 8
-            _, visdict_view = deca.decode(codedict)   
-            visdict = {x: visdict[x] for x in ['inputs', 'shape_detail_images']}         
-            visdict['pose'] = visdict_view['shape_detail_images']
-
-            # Ekspresi Wajah Normal (tidak ekstrem)
-            euler_pose = torch.zeros((1, 3))  # Ekspresi netral
-            jaw_pose = batch_euler2axis(deg2rad(euler_pose[:,:3].cuda())) 
-            # Print untuk memeriksa dimensi
-            print("Jaw Pose Shape:", jaw_pose.shape)  # Pastikan dimensi (1, 3)
-            codedict['pose'][:,3:] = jaw_pose  # Menetapkan ekspresi wajah netral
-            _, visdict_view_exp = deca.decode(codedict)     
-            visdict['exp'] = visdict_view_exp['shape_detail_images']
-
-            # Visualisasi hasil
-            os.makedirs(os.path.join(output_folder, name), exist_ok=True)
-            cv2.imwrite(os.path.join(output_folder, name + '_pose_exp_vis.jpg'), deca.visualize(visdict))
-
-            if True:  # Save all visualization images
-                for vis_name in ['inputs', 'rendered_images', 'albedo_images', 'shape_images', 'shape_detail_images', 'landmarks2d']:
-                    if vis_name not in visdict.keys():
-                        continue
-                    image = util.tensor2image(visdict[vis_name][0])
-                    cv2.imwrite(os.path.join(output_folder, name, name + '_' + vis_name + '.jpg'), image)
-
-    print(f'-- please check the results in {output_folder}')
-
-
+        # Create list for storing visualizations for this particular image
+        visdict_list = []
+        
+        # Set pose wajah normal (yaw=0, pitch=0, roll=0)
+        euler_pose = torch.zeros((1, 3))  # Euler pose with yaw, pitch, and roll all set to 0
+        global_pose = batch_euler2axis(deg2rad(euler_pose[:, :3].cuda()))  # Convert to rotation matrix
+        codedict['pose'][:,:3] = global_pose  # Apply the normal face pose
+        
+        # Set camera parameters to default
+        codedict['cam'][:,:] = 0.
+        codedict['cam'][:,0] = 8
+        
+        # Decode again to get the shape with normal pose (no yaw or pitch)
+        _, visdict_view = deca.decode(codedict)   
+        
+        # Extract relevant parts of the visualization (e.g., inputs, shape detail images)
+        visdict = {x: visdict[x] for x in ['inputs', 'shape_detail_images']}
+        visdict['pose'] = visdict_view['shape_detail_images']
+        
+        # Append this result to the visdict list for the current image
+        visdict_list.append(visdict)
+        
+        # Save the 3D object in .obj format
+        if args.saveObj:
+            deca.save_obj(os.path.join(savefolder, name, name + '.obj'), opdict)
+        
+        # Append the visual dict list for this image to the main list
+        visdict_list_list.append(visdict_list)
+    
+    print(f'-- Please check the teaser figure in {savefolder}')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA: Detailed Expression Capture and Animation')
 
-    # Input and output paths
-    parser.add_argument('-i', '--inputpath', default='TestSamples/examples', type=str,
-                        help='Path to the test data, can be image folder, image path, image list, or video')
-    parser.add_argument('-s', '--savefolder', default='TestSamples/examples/results', type=str,
-                        help='Path to the output directory, where results will be stored.')
-    
-    # Device configuration
-    parser.add_argument('--device', default='cuda', type=str, help='Set device, use cpu for CPU.')
-    
-    # Image processing parameters
+    parser.add_argument('-i', '--inputpath', default='TestSamples/teaser', type=str,
+                        help='path to the test data, can be image folder, image path, image list, video')
+    parser.add_argument('-e', '--exp_path', default='TestSamples/exp', type=str, 
+                        help='path to expression')
+    parser.add_argument('-s', '--savefolder', default='TestSamples/teaser/results', type=str,
+                        help='path to the output directory, where results(obj, txt files) will be stored.')
+    parser.add_argument('--device', default='cuda', type=str,
+                        help='set device, cpu for using cpu')
+    parser.add_argument('--rasterizer_type', default='standard', type=str,
+                        help='rasterizer type: pytorch3d or standard')
     parser.add_argument('--iscrop', default=True, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to crop input image. Set false only when the test images are well-cropped.')
-    parser.add_argument('--sample_step', default=10, type=int, help='Sample images from video data for every step.')
+                        help='whether to crop input image, set false only when the test image are well cropped')
     parser.add_argument('--detector', default='fan', type=str,
-                        help='Detector for cropping face, check decalib/detectors.py for details.')
+                        help='detector for cropping face, check detectos.py for details')
+    parser.add_argument('--saveObj', action='store_true', 
+                        help='whether to save the output as .obj files')
     
-    # Rendering options
-    parser.add_argument('--rasterizer_type', default='standard', type=str, help='Rasterizer type: pytorch3d or standard')
-    parser.add_argument('--render_orig', default=True, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to render results in original image size (only for rasterizer_type=standard).')
-    
-    # Texture and output save options
-    parser.add_argument('--useTex', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to use FLAME texture model to generate UV texture map.')
-    parser.add_argument('--extractTex', default=True, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to extract texture from input image as the UV texture map.')
-    parser.add_argument('--saveVis', default=True, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save visualization of output.')
-    parser.add_argument('--saveKpt', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save 2D and 3D keypoints.')
-    parser.add_argument('--saveDepth', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save depth image.')
-    parser.add_argument('--saveObj', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save outputs as .obj.')
-    parser.add_argument('--saveMat', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save outputs as .mat.')
-    parser.add_argument('--saveImages', default=False, type=lambda x: x.lower() in ['true', '1'],
-                        help='Whether to save visualization output as separate images.')
-    
-    # Parse the arguments and run the main function
-    args = parser.parse_args()
-    main(args)
+    main(parser.parse_args())
