@@ -60,9 +60,6 @@ def main(args):
         visdict_list.append(visdict)
         visdict_list_list.append(visdict_list)
 
-        # Simpan objek .obj
-        if args.saveObj:
-            deca.save_obj(os.path.join(savefolder, name, name + '.obj'), opdict)
         # Pastikan folder untuk menyimpan file .obj ada
         if args.saveObj:
             obj_folder = os.path.join(savefolder, name, save_type)  # Sesuaikan dengan struktur folder yang Anda inginkan
