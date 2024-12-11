@@ -62,7 +62,7 @@ def main(args):
 
         # Pastikan folder untuk menyimpan file .obj ada
         if args.saveObj:
-            obj_folder = os.path.join(savefolder, name, save_type)  # Sesuaikan dengan struktur folder yang Anda inginkan
+            obj_folder = os.path.join(savefolder, name)  # Sesuaikan dengan struktur folder yang Anda inginkan
             os.makedirs(obj_folder, exist_ok=True)  # Membuat folder jika belum ada
     
             # Tentukan path untuk file .obj yang akan disimpan
