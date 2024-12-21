@@ -139,10 +139,14 @@ class DECA(nn.Module):
     def encode(self, images, use_detail=True):
         if use_detail:
             # use_detail is for training detail model, need to set coarse model as eval mode
+            print('Jika menggunakan use_detail')
             with torch.no_grad():
                 parameters = self.E_flame(images)
         else:
+            print('tidak menggunakan use_detail')
             parameters = self.E_flame(images)
+        print("Shape of parameters:", parameters.shape)
+        print("Content of parameters:", parameters)
         codedict = self.decompose_code(parameters, self.param_dict)
         codedict['images'] = images
         if use_detail:
