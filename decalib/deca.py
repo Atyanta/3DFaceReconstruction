@@ -137,6 +137,17 @@ class DECA(nn.Module):
 
     # @torch.no_grad()
     def encode(self, images, use_detail=True):
+
+        def save_parameters_to_csv(parameters, file_path="parameters_dataset.csv"):
+            parameter_data = parameters.detach().cpu().numpy().flatten()
+            if os.path.exists(file_path):
+                df = pd.read_csv(file_path)
+                df[f"param_{len(df.columns) + 1}"] = parameter_data
+            else:
+                df = pd.DataFrame({f"param_1": parameter_data})
+            df.to_csv(file_path, index=False)
+            print(f"Parameters saved to {file_path}")
+        
         if use_detail:
             # use_detail is for training detail model, need to set coarse model as eval mode
             print('Jika menggunakan use_detail')
@@ -145,8 +156,7 @@ class DECA(nn.Module):
         else:
             print('tidak menggunakan use_detail')
             parameters = self.E_flame(images)
-        print("Shape of parameters:", parameters.shape)
-        print("Content of parameters:", parameters)
+        save_parameters_to_csv(parameters, file_path="parameters_dataset.csv")
         codedict = self.decompose_code(parameters, self.param_dict)
         codedict['images'] = images
         if use_detail:
