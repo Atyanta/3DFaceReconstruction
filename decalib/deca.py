@@ -104,6 +104,7 @@ class DECA(nn.Module):
         ''' Convert a flattened parameter vector to a dictionary of parameters
         code_dict.keys() = ['shape', 'tex', 'exp', 'pose', 'cam', 'light']
         '''
+        print('decompose code parametersnya aktif!)
         code_dict = {}
         start = 0
         for key in num_dict:
@@ -112,6 +113,7 @@ class DECA(nn.Module):
             start = end
             if key == 'light':
                 code_dict[key] = code_dict[key].reshape(code_dict[key].shape[0], 9, 3)
+            print('isi dari-', key, ' adalah: ', code_dict[key])
         return code_dict
 
     def displacement2normal(self, uv_z, coarse_verts, coarse_normals):
