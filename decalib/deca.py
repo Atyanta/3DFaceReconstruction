@@ -104,7 +104,7 @@ class DECA(nn.Module):
         ''' Convert a flattened parameter vector to a dictionary of parameters
         code_dict.keys() = ['shape', 'tex', 'exp', 'pose', 'cam', 'light']
         '''
-        print('decompose code parametersnya aktif!)
+        print('decompose code parametersnya aktif!')
         code_dict = {}
         start = 0
         for key in num_dict:
