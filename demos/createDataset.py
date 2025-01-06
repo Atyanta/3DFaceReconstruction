@@ -1,7 +1,9 @@
-import os
+import os, sys
 import pandas as pd
 import torch
 from tqdm import tqdm
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from decalib.deca import DECA
 from decalib.utils.config import cfg as deca_cfg
 import decalib.utils.util as util
