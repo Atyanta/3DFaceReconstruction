@@ -9,6 +9,10 @@ from decalib.utils.config import cfg as deca_cfg
 
 
 def main(args):
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    deca_cfg.rasterizer_type = args.rasterizer_type  # Set rasterizer type
+    deca = DECA(config=deca_cfg, device=device)
+    
     # Load CSV
     csv_path = args.csv_path
     output_csv_path = args.output_csv_path
@@ -82,10 +86,11 @@ def main(args):
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Process images from a CSV and extract DECA features')
-    parser.add_argument('--csv_path', required=True, type=str, help='Path to the input CSV file')
-    parser.add_argument('--output_csv_path', required=True, type=str, help='Path to save the updated CSV file')
-    parser.add_argument('--device', default='cuda', type=str, help='Device to use for processing (cpu or cuda)')
+    parser = argparse.ArgumentParser(description="Process images and add DECA outputs to a CSV file.")
+    parser.add_argument("--csv_path", type=str, required=True, help="Path to the input CSV file.")
+    parser.add_argument("--output_csv", type=str, required=True, help="Path to the output CSV file.")
+    parser.add_argument("--device", type=str, default="cuda", help="Device to use for computation ('cuda' or 'cpu').")
+    parser.add_argument("--rasterizer_type", type=str, default="standard", help="Rasterizer type ('standard' or 'pytorch3d').")
     
     args = parser.parse_args()
     main(args)
