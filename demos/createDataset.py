@@ -1,12 +1,25 @@
-import os, sys
+import os
+import sys
 import pandas as pd
 import torch
 from tqdm import tqdm
+from PIL import Image
+from torchvision import transforms
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from decalib.deca import DECA
 from decalib.utils.config import cfg as deca_cfg
-import decalib.utils.util as util
+
+# Fungsi untuk memuat dan memproses gambar
+def load_image(image_path, device):
+    """Load and preprocess an image."""
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),  # Sesuaikan ukuran input DECA
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    image = Image.open(image_path).convert('RGB')  # Pastikan gambar dalam mode RGB
+    return transform(image).to(device)
 
 def main(args):
     # Tentukan device
@@ -51,7 +64,7 @@ def main(args):
         else:
             try:
                 # Load dan proses gambar dengan DECA
-                image = util.load_image(image_path).to(device)[None, ...]
+                image = load_image(image_path, device)[None, ...]  # Tambahkan dimensi batch
                 with torch.no_grad():
                     codedict = deca.encode(image)
                     result = {
@@ -75,7 +88,6 @@ def main(args):
     # Simpan DataFrame yang diperbarui ke CSV output
     data.to_csv(args.output_csv_path, index=False)
     print(f"CSV yang diperbarui disimpan ke: {args.output_csv_path}")
-
 
 if __name__ == '__main__':
     import argparse
