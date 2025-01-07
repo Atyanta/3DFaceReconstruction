@@ -72,6 +72,10 @@ def main(args):
                         'shape': codedict['shape'].cpu().numpy().tolist(),
                         'tex': codedict['tex'].cpu().numpy().tolist(),
                         'exp': codedict['exp'].cpu().numpy().tolist(),
+                        'pose': codedict['pose'].cpu().numpy().tolist(),
+                        'euler_jaw_pose': codedict['euler_jaw_pose'].cpu().numpy().tolist(),
+                        'light': codedict['light'].cpu().numpy().tolist(),
+                        'cam' : codedict['cam'].cpu().numpy().tolist(),
                     }
                     # Simpan hasil ke cache
                     cache[voice_id] = result
@@ -84,6 +88,10 @@ def main(args):
         data.at[index, 'shape'] = str(result['shape'])
         data.at[index, 'tex'] = str(result['tex'])
         data.at[index, 'exp'] = str(result['exp'])
+        data.at[index, 'pose'] = str(result['pose']
+        data.at[index, 'euler_jaw_pose'] = str(result['euler_jaw_pose'])
+        data.at[index, 'light'] = str(result['light'])
+        data.at[index, 'cam'] = str(result['cam'])
 
     # Simpan DataFrame yang diperbarui ke CSV output
     data.to_csv(args.output_csv_path, index=False)
