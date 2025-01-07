@@ -168,6 +168,7 @@ class DECA(nn.Module):
             print('isi dari detail adalah: ')
             print(codedict['detail'])
         if self.cfg.model.jaw_type == 'euler':
+            print('masuk ke cfg model jaw type!')
             posecode = codedict['pose']
             euler_jaw_pose = posecode[:,3:].clone() # x for yaw (open mouth), y for pitch (left ang right), z for roll
             posecode[:,3:] = batch_euler2axis(euler_jaw_pose)
