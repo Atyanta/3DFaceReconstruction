@@ -113,7 +113,7 @@ class DECA(nn.Module):
             start = end
             if key == 'light':
                 code_dict[key] = code_dict[key].reshape(code_dict[key].shape[0], 9, 3)
-            print('isi dari-', key, ' adalah: ', code_dict[key])
+           # print('isi dari-', key, ' adalah: ', code_dict[key])
         return code_dict
 
     def displacement2normal(self, uv_z, coarse_verts, coarse_normals):
