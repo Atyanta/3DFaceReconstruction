@@ -165,8 +165,8 @@ class DECA(nn.Module):
         if use_detail:
             detailcode = self.E_detail(images)
             codedict['detail'] = detailcode
-            print('isi dari detail adalah: ')
-            print(codedict['detail'])
+            #print('isi dari detail adalah: ')
+            #print(codedict['detail'])
         if self.cfg.model.jaw_type == 'euler':
             print('masuk ke cfg model jaw type!')
             posecode = codedict['pose']
