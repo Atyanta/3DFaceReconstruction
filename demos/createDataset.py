@@ -88,7 +88,7 @@ def main(args):
         data.at[index, 'shape'] = str(result['shape'])
         data.at[index, 'tex'] = str(result['tex'])
         data.at[index, 'exp'] = str(result['exp'])
-        data.at[index, 'pose'] = str(result['pose']
+        data.at[index, 'pose'] = str(result['pose'])
         data.at[index, 'euler_jaw_pose'] = str(result['euler_jaw_pose'])
         data.at[index, 'light'] = str(result['light'])
         data.at[index, 'cam'] = str(result['cam'])
