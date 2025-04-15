@@ -344,3 +344,147 @@ class DECA(nn.Module):
             'E_detail': self.E_detail.state_dict(),
             'D_detail': self.D_detail.state_dict()
         }
+
+# Iki program nggone Atyan--------------------------------------------------------
+    
+    def get_flame_landmarks(self, codedict):
+        """Mendapatkan landmark FLAME dalam koordinat 3D dunia"""
+        with torch.no_grad():
+            verts, landmarks2d, landmarks3d = self.flame(
+                shape_params=codedict['shape'],
+                expression_params=codedict['exp'],
+                pose_params=codedict['pose']
+            )
+        return {
+            'vertices': verts,
+            'landmarks2d': landmarks2d,
+            'landmarks3d': landmarks3d
+        }
+
+    def get_landmark_indices(self):
+        """Mengembalikan indeks landmark FLAME standar"""
+        return {
+            'nasion': 27,
+            'pronasale': 30,
+            'subnasale': 33,
+            'labiale_superius': 51,
+            'labiale_inferius': 57,
+            'menton': 8,
+            'zygion_left': 1,
+            'zygion_right': 15,
+            'tragion_left': 127,
+            'tragion_right': 356
+        }
+
+    def extract_anthropometric_landmarks(landmarks3d, indices):
+        """
+        Ekstrak landmark spesifik untuk pengukuran antropometri
+    
+        Args:
+            landmarks3d: Tensor (B, 68, 3)
+            indices: Kamus indeks landmark
+    
+        Returns:
+            Dict landmark 3D
+        """
+        return {
+        name: landmarks3d[:, idx].squeeze().cpu().numpy()
+            for name, idx in indices.items()
+        }
+
+    def experiment_with_single_dimension(codedict, dim_idx, variation_values, deca):
+        results = []
+        flame_indices = deca.get_landmark_indices()
+        
+        for variation in variation_values:
+            # Modifikasi shape vector
+            modified_shape = codedict['shape'].clone()
+            modified_shape[0, dim_idx] += variation
+            
+            # Generate landmark
+            modified_codedict = {**codedict, 'shape': modified_shape}
+            landmark_data = deca.get_flame_landmarks(modified_codedict)
+        
+            # Ekstrak landmark antropometri
+            selected_lmks = extract_anthropometric_landmarks(
+                landmark_data['landmarks3d'],
+                flame_indices
+            )
+        
+            # Hitung metrik
+            metrics = compute_anthropometrics(selected_lmks)
+        
+            results.append({
+                'dim_idx': dim_idx,
+                'variation': variation,
+                'landmarks': selected_lmks,
+                'metrics': metrics
+            })
+    
+        return results
+
+    def analyze_shape_impact(base_shape, deca, variations=np.linspace(-3, 3, 7)):
+        analysis = {}
+        flame_indices = deca.get_landmark_indices()
+        
+        for dim in range(100):
+            print(f"Analyzing dimension {dim}...")
+            dim_results = []
+        
+            for val in variations:
+                # Modifikasi shape
+                modified_shape = base_shape.clone()
+                modified_shape[0, dim] = val
+                
+                # Dapatkan landmark
+                codedict = {'shape': modified_shape}
+                landmark_data = deca.get_flame_landmarks(codedict)
+                landmarks = extract_anthropometric_landmarks(
+                    landmark_data['landmarks3d'],
+                    flame_indices
+                )
+            
+                # Simpan hasil
+                dim_results.append({
+                    'value': val,
+                    'landmarks': landmarks,
+                    'vertices': landmark_data['vertices'].cpu().numpy()
+                })
+        
+            analysis[dim] = dim_results
+    
+        return analysis
+
+    def visualize_landmark_changes(base_landmarks, modified_landmarks):
+        plt.figure(figsize=(10, 8))
+        ax = plt.axes(projection='3d')
+        
+        # Plot landmark dasar
+        for name, point in base_landmarks.items():
+            ax.scatter(*point, c='b', label=name if 'nasion' in name else "")
+    
+        # Plot landmark termodifikasi
+        for name, point in modified_landmarks.items():
+            ax.scatter(*point, c='r', label=name+" mod" if 'nasion' in name else "")
+    
+        # Koneksi antar landmark
+        connections = [
+            ('nasion', 'pronasale'),
+            ('pronasale', 'subnasale'),
+            ('subnasale', 'labiale_superius'),
+            ('labiale_superius', 'labiale_inferius'),
+            ('labiale_inferius', 'menton')
+        ]    
+    
+        for conn in connections:
+            for landmarks in [base_landmarks, modified_landmarks]:
+                x = [landmarks[conn[0]][0], landmarks[conn[1]][0]
+                y = [landmarks[conn[0]][1], landmarks[conn[1]][1]
+                z = [landmarks[conn[0]][2], landmarks[conn[1]][2]
+                ax.plot(x, y, z, c='g' if landmarks is base_landmarks else 'r')
+    
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        plt.title('3D Landmark Comparison')
+        plt.show()
