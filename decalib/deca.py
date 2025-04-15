@@ -478,9 +478,9 @@ class DECA(nn.Module):
     
         for conn in connections:
             for landmarks in [base_landmarks, modified_landmarks]:
-                x = [landmarks[conn[0]][0], landmarks[conn[1]][0]
-                y = [landmarks[conn[0]][1], landmarks[conn[1]][1]
-                z = [landmarks[conn[0]][2], landmarks[conn[1]][2]
+                x = [landmarks[conn[0]][0], landmarks[conn[1]][0]]
+                y = [landmarks[conn[0]][1], landmarks[conn[1]][1]]
+                z = [landmarks[conn[0]][2], landmarks[conn[1]][2]]
                 ax.plot(x, y, z, c='g' if landmarks is base_landmarks else 'r')
     
         ax.set_xlabel('X')
