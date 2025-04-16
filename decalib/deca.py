@@ -244,6 +244,13 @@ class DECA(nn.Module):
         if vis_lmk:
             landmarks3d_vis = self.visofp(ops['transformed_normals'])#/self.image_size
             landmarks3d = torch.cat([landmarks3d, landmarks3d_vis], dim=2)
+            # Cetak informasi lengkap
+            print(f"""
+            === LANDMARK SHAPE INFO ===
+            Base Landmarks:      {landmarks3d.shape}
+            Visibility Channel:  {landmarks3d_vis.shape}
+            Concatenated Dim:    {landmarks3d.shape[2]}
+            """)
             opdict['landmarks3d'] = landmarks3d
 
         if return_vis:
