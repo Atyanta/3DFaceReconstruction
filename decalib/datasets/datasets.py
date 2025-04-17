@@ -24,6 +24,7 @@ from skimage.io import imread, imsave
 from skimage.transform import estimate_transform, warp, resize, rescale
 from glob import glob
 import scipy.io
+import sys  # Ditambahkan di bagian atas file
 
 from . import detectors
 
@@ -60,7 +61,7 @@ class TestData(Dataset):
             self.imagepath_list = video2sequence(testpath, sample_step)
         else:
             print(f'please check the test path: {testpath}')
-            exit()
+            sys.exit(1)  # Sebelumnya: exit()
         # print('total {} images'.format(len(self.imagepath_list)))
         self.imagepath_list = sorted(self.imagepath_list)
         self.crop_size = crop_size
@@ -73,7 +74,7 @@ class TestData(Dataset):
         #     self.face_detector = detectors.MTCNN()
         else:
             print(f'please check the detector: {face_detector}')
-            exit()
+            sys.exit(1)  # Sebelumnya: exit()
 
     def __len__(self):
         return len(self.imagepath_list)
