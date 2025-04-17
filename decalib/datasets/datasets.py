@@ -61,7 +61,8 @@ class TestData(Dataset):
             self.imagepath_list = video2sequence(testpath, sample_step)
         else:
             print(f'please check the test path: {testpath}')
-            sys.exit(1)  # Sebelumnya: exit()
+            raise ValueError(f"Invalid test path: {testpath}")
+            
         # print('total {} images'.format(len(self.imagepath_list)))
         self.imagepath_list = sorted(self.imagepath_list)
         self.crop_size = crop_size
@@ -74,7 +75,7 @@ class TestData(Dataset):
         #     self.face_detector = detectors.MTCNN()
         else:
             print(f'please check the detector: {face_detector}')
-            sys.exit(1)  # Sebelumnya: exit()
+            raise ValueError(f"Unsupported face detector: {face_detector}")
 
     def __len__(self):
         return len(self.imagepath_list)
