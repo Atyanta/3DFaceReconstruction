@@ -16,12 +16,14 @@
 import numpy as np
 import torch
 
+import numpy as np
+import torch
+
 class FAN(object):
     def __init__(self):
         import face_alignment
 
         LT = face_alignment.LandmarksType
-
         if hasattr(LT, "_2D"):
             lm_type = LT._2D
             print("[INFO] pakai LandmarksType._2D")
@@ -33,11 +35,15 @@ class FAN(object):
             print("[INFO] pakai LandmarksType.Two_D")
         else:
             raise AttributeError(
-                f"Tidak menemukan enum 2D yang cocok di LandmarksType. "
-                f"Isi yang tersedia: {[x for x in dir(LT) if not x.startswith('__')]}"
+                f"Enum 2D tidak ditemukan. Isi LandmarksType: "
+                f"{[x for x in dir(LT) if not x.startswith('__')]}"
             )
 
-        self.model = face_alignment.FaceAlignment(lm_type, flip_input=False)
+        self.model = face_alignment.FaceAlignment(
+            lm_type,
+            flip_input=False,
+            device="cpu"
+        )
 
     def run(self, image):
         '''
