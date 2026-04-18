@@ -19,11 +19,25 @@ import torch
 class FAN(object):
     def __init__(self):
         import face_alignment
-        
-        try:
-           self.model = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False)
-        except:
-            self.model = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False)
+
+        LT = face_alignment.LandmarksType
+
+        if hasattr(LT, "_2D"):
+            lm_type = LT._2D
+            print("[INFO] pakai LandmarksType._2D")
+        elif hasattr(LT, "TWO_D"):
+            lm_type = LT.TWO_D
+            print("[INFO] pakai LandmarksType.TWO_D")
+        elif hasattr(LT, "Two_D"):
+            lm_type = LT.Two_D
+            print("[INFO] pakai LandmarksType.Two_D")
+        else:
+            raise AttributeError(
+                f"Tidak menemukan enum 2D yang cocok di LandmarksType. "
+                f"Isi yang tersedia: {[x for x in dir(LT) if not x.startswith('__')]}"
+            )
+
+        self.model = face_alignment.FaceAlignment(lm_type, flip_input=False)
 
     def run(self, image):
         '''
