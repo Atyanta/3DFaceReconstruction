@@ -254,31 +254,49 @@ class DECA(nn.Module):
             opdict['landmarks3d'] = landmarks3d
 
         if return_vis:
-            ## render shape
-            shape_images, _, grid, alpha_images = self.render.render_shape(verts, trans_verts, h=h, w=w, images=background, return_grid=True)
-            detail_normal_images = F.grid_sample(uv_detail_normals, grid, align_corners=False)*alpha_images
-            shape_detail_images = self.render.render_shape(verts, trans_verts, detail_normal_images=detail_normal_images, h=h, w=w, images=background)
-            
-            ## extract texture
-            ## TODO: current resolution 256x256, support higher resolution, and add visibility
-            uv_pverts = self.render.world2uv(trans_verts)
-            uv_gt = F.grid_sample(images, uv_pverts.permute(0,2,3,1)[:,:,:,:2], mode='bilinear', align_corners=False)
-            if self.cfg.model.use_tex:
-                ## TODO: poisson blending should give better-looking results
-                if self.cfg.model.extract_tex:
-                    uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (uv_texture[:,:3,:,:]*(1-self.uv_face_eye_mask))
-                else:
-                    uv_texture_gt = uv_texture[:,:3,:,:]
+            ## render shape (coarse)
+            shape_images, _, grid, alpha_images = self.render.render_shape(
+                verts, trans_verts, h=h, w=w, images=background, return_grid=True)
+
+            # PERBAIKAN: guard — uv_detail_normals hanya ada jika use_detail=True
+            if use_detail and 'uv_detail_normals' in opdict:
+                detail_normal_images = (
+                    F.grid_sample(opdict['uv_detail_normals'], grid,
+                                  align_corners=False) * alpha_images
+                )
+                shape_detail_images = self.render.render_shape(
+                    verts, trans_verts,
+                    detail_normal_images=detail_normal_images,
+                    h=h, w=w, images=background)
             else:
-                uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (torch.ones_like(uv_gt[:,:3,:,:])*(1-self.uv_face_eye_mask)*0.7)
-            
+                # Fallback: gunakan coarse shape jika detail tidak tersedia
+                shape_detail_images = shape_images
+
+            ## extract texture
+            uv_pverts = self.render.world2uv(trans_verts)
+            uv_gt = F.grid_sample(
+                images,
+                uv_pverts.permute(0, 2, 3, 1)[:, :, :, :2],
+                mode='bilinear', align_corners=False)
+
+            if self.cfg.model.use_tex:
+                if self.cfg.model.extract_tex:
+                    uv_texture_gt = (uv_gt[:, :3, :, :] * self.uv_face_eye_mask
+                                     + uv_texture[:, :3, :, :] * (1 - self.uv_face_eye_mask))
+                else:
+                    uv_texture_gt = uv_texture[:, :3, :, :]
+            else:
+                uv_texture_gt = (uv_gt[:, :3, :, :] * self.uv_face_eye_mask
+                                 + torch.ones_like(uv_gt[:, :3, :, :])
+                                 * (1 - self.uv_face_eye_mask) * 0.7)
+
             opdict['uv_texture_gt'] = uv_texture_gt
             visdict = {
-                'inputs': images, 
+                'inputs': images,
                 'landmarks2d': util.tensor_vis_landmarks(images, landmarks2d),
                 'landmarks3d': util.tensor_vis_landmarks(images, landmarks3d),
                 'shape_images': shape_images,
-                'shape_detail_images': shape_detail_images
+                'shape_detail_images': shape_detail_images,
             }
             if self.cfg.model.use_tex:
                 visdict['rendered_images'] = ops['images']
@@ -308,33 +326,44 @@ class DECA(nn.Module):
         return grid_image
     
     def save_obj(self, filename, opdict):
-        '''
-        vertices: [nv, 3], tensor
-        texture: [3, h, w], tensor
-        '''
+        '''Save coarse mesh (+ detail mesh jika tersedia).'''
         i = 0
-        vertices = opdict['verts'][i].cpu().numpy()
-        faces = self.render.faces[0].cpu().numpy()
-        texture = util.tensor2image(opdict['uv_texture_gt'][i])
-        uvcoords = self.render.raw_uvcoords[0].cpu().numpy()
-        uvfaces = self.render.uvfaces[0].cpu().numpy()
-        # save coarse mesh, with texture and normal map
-        normal_map = util.tensor2image(opdict['uv_detail_normals'][i]*0.5 + 0.5)
-        util.write_obj(filename, vertices, faces, 
-                        texture=texture, 
-                        uvcoords=uvcoords, 
-                        uvfaces=uvfaces, 
-                        normal_map=normal_map)
-        # upsample mesh, save detailed mesh
-        texture = texture[:,:,[2,1,0]]
-        normals = opdict['normals'][i].cpu().numpy()
-        displacement_map = opdict['displacement_map'][i].cpu().numpy().squeeze()
-        dense_vertices, dense_colors, dense_faces = util.upsample_mesh(vertices, normals, faces, displacement_map, texture, self.dense_template)
-        util.write_obj(filename.replace('.obj', '_detail.obj'), 
-                        dense_vertices, 
-                        dense_faces,
-                        colors = dense_colors,
-                        inverse_face_order=True)
+        vertices  = opdict['verts'][i].cpu().numpy()
+        faces     = self.render.faces[0].cpu().numpy()
+        uvcoords  = self.render.raw_uvcoords[0].cpu().numpy()
+        uvfaces   = self.render.uvfaces[0].cpu().numpy()
+
+        # uv_texture_gt selalu ada (dari extract_tex atau fallback gray)
+        texture   = util.tensor2image(opdict['uv_texture_gt'][i])
+
+        # PERBAIKAN: simpan coarse mesh dulu (selalu bisa)
+        if 'uv_detail_normals' in opdict:
+            normal_map = util.tensor2image(
+                opdict['uv_detail_normals'][i] * 0.5 + 0.5)
+            util.write_obj(filename, vertices, faces,
+                           texture=texture,
+                           uvcoords=uvcoords,
+                           uvfaces=uvfaces,
+                           normal_map=normal_map)
+            # Detail mesh (dense)
+            texture_bgr = texture[:, :, [2, 1, 0]]
+            normals = opdict['normals'][i].cpu().numpy()
+            displacement_map = (opdict['displacement_map'][i]
+                                .cpu().numpy().squeeze())
+            dense_vertices, dense_colors, dense_faces = util.upsample_mesh(
+                vertices, normals, faces, displacement_map,
+                texture_bgr, self.dense_template)
+            util.write_obj(filename.replace('.obj', '_detail.obj'),
+                           dense_vertices, dense_faces,
+                           colors=dense_colors,
+                           inverse_face_order=True)
+        else:
+            # use_detail=False — simpan coarse saja tanpa normal map
+            print(f"  [save_obj] use_detail=False: menyimpan coarse mesh saja")
+            util.write_obj(filename, vertices, faces,
+                           texture=texture,
+                           uvcoords=uvcoords,
+                           uvfaces=uvfaces)
     
     def run(self, imagepath, iscrop=True):
         ''' An api for running deca given an image path
